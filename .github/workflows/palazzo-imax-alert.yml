@@ -1,0 +1,58 @@
+name: Palazzo IMAX Tamil Alert
+
+on:
+  schedule:
+    - cron: '*/5 * * * *' # Runs every 5 minutes in the cloud
+  workflow_dispatch:      # Lets you trigger a manual test anytime
+
+jobs:
+  check-bms:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Python & Playwright
+        run: |
+          pip install playwright requests
+          playwright install chromium
+
+      - name: Check PVR Palazzo Nov 21 for Ramayana Tamil IMAX
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python3 - << 'EOF'
+          import os, requests
+          from playwright.sync_api import sync_playwright
+
+          URL = "https://in.bookmyshow.com/cinemas/chennai/pvr-palazzo-the-nexus-vijaya-mall/buytickets/PVPZ/20261121"
+          BOT_TOKEN = os.environ["BOT_TOKEN"]
+          CHAT_ID = os.environ["CHAT_ID"]
+
+          with sync_playwright() as p:
+              browser = p.chromium.launch(headless=True)
+              context = browser.new_context(
+                  user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+              )
+              page = context.new_page()
+              page.goto(URL, wait_until="networkidle", timeout=45000)
+              page.wait_for_timeout(4000)
+              content = page.inner_text("body").lower()
+              browser.close()
+
+          # Verify we landed on the Nov 21 schedule and Ramayana Tamil IMAX is listed
+          if "ramayana" in content and "imax" in content and "tamil" in content:
+              msg = (
+                  "🚨 BOOKINGS OPEN! 🚨\n\n"
+                  "🎬 Movie: Ramayana (Tamil - IMAX 3D)\n"
+                  "📍 Cinema: PVR Palazzo, Nexus Vijaya Mall\n"
+                  "📅 Date: Saturday, Nov 21\n\n"
+                  f"👉 Book immediately: {URL}"
+              )
+              requests.post(
+                  f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                  data={"chat_id": CHAT_ID, "text": msg}
+              )
+              print("ALERT SENT TO TELEGRAM!")
+          else:
+              print("Not open yet for Nov 21 Tamil IMAX.")
+          EOF
+          
